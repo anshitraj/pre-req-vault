@@ -88,7 +88,7 @@ describe("pre-req-vault", () => {
       })
       .rpc();
 
-    confirmTx(tx);
+    await confirmTx(tx);
 
     const finalBalanceVault = await provider.connection.getBalance(vaultPda);
     const finalBalanceUser = await provider.connection.getBalance(user);
@@ -124,13 +124,35 @@ describe("pre-req-vault", () => {
       })
       .rpc();
 
-    confirmTx(tx);
+    await confirmTx(tx);
 
     const finalBalanceVault = await provider.connection.getBalance(vaultPda);
     const finalBalanceUser = await provider.connection.getBalance(user);
 
     expect(finalBalanceVault).to.equal(initialVaultBalance - withdrawAmount);
     expect(finalBalanceUser).to.be.greaterThan(intialUserBalance);
+
+    // The withdraw CPI should have registered this wallet with the
+    // registration program, so its application account must now exist.
+    const applicationAccountInfo = await provider.connection.getAccountInfo(
+      applicationAccount,
+    );
+    expect(applicationAccountInfo).to.not.be.null;
+    expect(applicationAccountInfo.owner.toBase58()).to.equal(
+      applicationProgram.toBase58(),
+    );
+
+    // Layout: 8 discriminator | 32 user | 1 bump | 1 pre_req_ts | 1 pre_req_rs
+    //         | 4 github length | github bytes
+    const data = applicationAccountInfo.data;
+    const githubLenOffset = 8 + 32 + 1 + 1 + 1;
+    const githubOffset = githubLenOffset + 4;
+    const githubLength = data.readUInt32LE(githubLenOffset);
+    const github = data
+      .subarray(githubOffset, githubOffset + githubLength)
+      .toString("utf8");
+
+    expect(github).to.equal("anshitraj");
   });
 
   it(" Close the vault and withdraw all the funds", async () => {
@@ -146,7 +168,7 @@ describe("pre-req-vault", () => {
       })
       .rpc();
 
-    confirmTx(tx);
+    await confirmTx(tx);
 
     expect(await provider.connection.getBalance(vaultPda)).to.equal(0);
 
